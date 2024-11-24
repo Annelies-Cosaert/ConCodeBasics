@@ -403,17 +403,14 @@ old_timeout <- getOption("timeout")
 options(timeout = 60)
 
 # Get available weather stations
-stations_meta <- tryCatch({
-  getMeta()
-  
-  # Continue with station ID and dates
-  # *** MODIFY STATION ID FOR NEW ANALYSIS ***
-  # **** CREATE LIST OF CHOSEN WEATHER STATION TO DOCUMENT METHOD ****
-  station_id <- "064500-99999"
-  start_year <- year(min(BUILDING_h$DateTime, na.rm = TRUE))
-  end_year <- year(max(BUILDING_h$DateTime, na.rm = TRUE))
-  
-  # Download and process weather data
+# Set station code for Uccle
+# *** MODIFY STATION CODE IF NEEDED FOR NEW ANALYSIS, DEFAULT IS UCCLE, BE ***
+station_id <- "064500-99999"
+start_year <- year(min(BUILDING_h$DateTime, na.rm = TRUE))
+end_year <- year(max(BUILDING_h$DateTime, na.rm = TRUE))
+
+# Download and process weather data
+WEATHER <- tryCatch({
   weather_raw <- importNOAA(code = station_id, year = start_year:end_year, hourly = TRUE)
   
   weather_raw %>%
@@ -425,7 +422,9 @@ stations_meta <- tryCatch({
       To = air_temp,             # Temperature outdoor
       Dwpto = dew_point,         # Dew point outdoor
       RHo = RH,                  # Relative humidity outdoor
-      Precipo_12range = precip   # Precipitation
+      Precip = precip,           # Hourly precipitation
+      Precip_6h = precip_6,      # 6-hour precipitation
+      Precip_12h = precip_12     # 12-hour precipitation
     ) %>%
     mutate(across(where(is.numeric), ~round(as.numeric(.), 2))) %>%
     filter(DateTime >= min(BUILDING_h$DateTime, na.rm = TRUE) & 
@@ -436,6 +435,7 @@ stations_meta <- tryCatch({
 }, finally = {
   options(timeout = old_timeout)  # Reset timeout
 })
+
 
 WEATHER <- stations_meta  # Assign the processed data to WEATHER
 
