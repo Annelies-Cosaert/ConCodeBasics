@@ -51,3 +51,6 @@ rsconnect/
 # Others
 .DS_Store
 ConCodeBasics.Rproj
+
+# Ignore file mode changes
+*.mode=100644
