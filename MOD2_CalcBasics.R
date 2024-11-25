@@ -875,40 +875,117 @@ analyze_weather_extremes <- function(weather_data, prefix, registry) {
   
   # 3. Find Heatwaves
   find_heatwaves <- function(data) {
-    # Get daily max temperatures
+    # Get daily max temperatures with proper NA handling
     daily_max <- data %>%
       group_by(Date = as.Date(DateTime)) %>%
       summarise(
-        max_temp = max(To, na.rm = TRUE),
+        max_temp = if(all(is.na(To))) NA else max(To, na.rm = TRUE),
         .groups = "drop"
-      )
+      ) %>%
+      filter(!is.na(max_temp))  # Remove days with no valid temperatures
     
-    # Find potential heatwave starts (5+ days >=25°C)
-    heatwaves <- map_df(1:(nrow(daily_max)-4), function(i) {
-      period <- daily_max[i:(i+4), ]
-      if (all(period$max_temp >= 25)) {
-        # Check for 3 days >=30°C in or right after this period
-        check_period <- daily_max[i:(min(i+6, nrow(daily_max))), ]
-        if (sum(check_period$max_temp >= 30) >= 3) {
-          # Get full period data
-          period_data <- data %>%
-            filter(
-              DateTime >= as.POSIXct(paste(period$Date[1], "00:00:00")),
-              DateTime <= as.POSIXct(paste(period$Date[5], "23:59:59"))
-            )
-          
-          tibble(
-            DateTime_from = format_datetime(min(period_data$DateTime)),
-            DateTime_to = format_datetime(max(period_data$DateTime)),
-            Max_value = round(max(period_data$To, na.rm = TRUE), 2),
-            Min_value = round(min(period_data$To, na.rm = TRUE), 2),
-            Avg_value = round(mean(period_data$To, na.rm = TRUE), 2),
-            Unit = "°C"
+    # Find potential heatwave periods
+    potential_heatwaves <- data.frame()
+    
+    for(i in 1:(nrow(daily_max) - 4)) {
+      # Look at 7-day windows (5 days minimum + 2 extra days to check)
+      window <- daily_max[i:min(i+6, nrow(daily_max)), ]
+      
+      # Check if we have 5 consecutive days >= 25°C
+      consecutive_hot <- sum(window$max_temp >= 25) >= 5
+      # Check if we have at least 3 days >= 30°C in this period
+      very_hot_days <- sum(window$max_temp >= 30) >= 3
+      
+      if(consecutive_hot && very_hot_days) {
+        # This is a heatwave period
+        period_data <- data %>%
+          filter(
+            DateTime >= as.POSIXct(paste(min(window$Date), "00:00:00")),
+            DateTime <= as.POSIXct(paste(max(window$Date), "23:59:59"))
           )
+        
+        # Create new row
+        new_period <- tibble(
+          start_date = min(window$Date),
+          end_date = max(window$Date),
+          max_temp = max(window$max_temp, na.rm = TRUE)
+        )
+        
+        # Add to potential heatwaves
+        potential_heatwaves <- rbind(potential_heatwaves, new_period)
+      }
+    }
+    
+    # If we found any heatwaves, consolidate overlapping periods
+    if(nrow(potential_heatwaves) > 0) {
+      # Sort by start date
+      potential_heatwaves <- potential_heatwaves[order(potential_heatwaves$start_date), ]
+      
+      # Consolidate overlapping periods
+      consolidated <- data.frame()
+      current_start <- potential_heatwaves$start_date[1]
+      current_end <- potential_heatwaves$end_date[1]
+      current_max <- potential_heatwaves$max_temp[1]
+      
+      for(i in 2:nrow(potential_heatwaves)) {
+        if(potential_heatwaves$start_date[i] <= current_end + 1) {
+          # Periods overlap or are consecutive, extend current period
+          current_end <- max(current_end, potential_heatwaves$end_date[i])
+          current_max <- max(current_max, potential_heatwaves$max_temp[i])
+        } else {
+          # Add current period to consolidated and start new one
+          consolidated <- rbind(consolidated, 
+                                data.frame(start_date = current_start,
+                                           end_date = current_end,
+                                           max_temp = current_max))
+          current_start <- potential_heatwaves$start_date[i]
+          current_end <- potential_heatwaves$end_date[i]
+          current_max <- potential_heatwaves$max_temp[i]
         }
       }
-    }) %>%
-      distinct()  # Remove any duplicates
+      
+      # Add last period
+      consolidated <- rbind(consolidated,
+                            data.frame(start_date = current_start,
+                                       end_date = current_end,
+                                       max_temp = current_max))
+      
+      # Create final output format
+      heatwaves <- map_df(1:nrow(consolidated), function(i) {
+        period_data <- data %>%
+          filter(
+            DateTime >= as.POSIXct(paste(consolidated$start_date[i], "00:00:00")),
+            DateTime <= as.POSIXct(paste(consolidated$end_date[i], "23:59:59"))
+          )
+        
+        valid_temps <- period_data$To[!is.na(period_data$To)]
+        
+        tibble(
+          DateTime_from = format_datetime(min(period_data$DateTime)),
+          DateTime_to = format_datetime(max(period_data$DateTime)),
+          Max_value = round(max(valid_temps, na.rm = TRUE), 2),
+          Min_value = round(min(valid_temps, na.rm = TRUE), 2),
+          Avg_value = round(mean(valid_temps, na.rm = TRUE), 2),
+          Days = ceiling(as.numeric(difftime(max(period_data$DateTime),
+                                             min(period_data$DateTime),
+                                             units = "days"))) + 1,  # Rounded up to whole days
+          Unit = "°C"
+        )
+      })
+      
+      return(heatwaves)
+    } else {
+      # Return empty tibble if no heatwaves found
+      return(tibble(
+        DateTime_from = character(),
+        DateTime_to = character(),
+        Max_value = numeric(),
+        Min_value = numeric(),
+        Avg_value = numeric(),
+        Days = integer(),  # Changed to integer for consistency
+        Unit = character()
+      ))
+    }
   }
   
   # 4. Find Cold Periods
@@ -986,15 +1063,11 @@ analyze_weather_extremes <- function(weather_data, prefix, registry) {
   dry_periods <- weather_data %>%
     filter(!is.na(Precip)) %>%
     find_dry_periods()
-  
   wet_periods <- weather_data %>%
     filter(!is.na(Precip_12h)) %>%
     find_wet_periods()
-  
   heatwaves <- find_heatwaves(weather_data)
-  
   cold_periods <- find_cold_periods(weather_data)
-  
   humid_periods <- find_humid_periods(weather_data)
   
   # Save results
@@ -1061,6 +1134,7 @@ extreme_weather <- analyze_weather_extremes(WEATHER, prefix, dir_registry)
 # Get from the 'Locx' ('Letterhuis_Loc1_Beelden'), 'Tix' and 'RHix' (Ti1 and 'RHix) columns
 
 # Define all climate class criteria
+# Define all climate class criteria
 climate_classes <- list(
   AA = list(
     annual_temp = NULL,  # If NULL, will use Average_T from Averages table (excluding outliers)
@@ -1073,8 +1147,8 @@ climate_classes <- list(
     fluct_rh = 10
   ),
   A1 = list(
-    annual_temp = NULL,  # If NULL, will use Average_T from Averages table (excluding outliers)
-    annual_rh = NULL,    # If NULL, will use Average_RH from Averages table (excluding outliers)
+    annual_temp = NULL,
+    annual_rh = NULL,
     temp_limits = c(10, 25),
     rh_limits = c(35, 65),
     seasonal_temp = c(-10, 5),
@@ -1083,8 +1157,8 @@ climate_classes <- list(
     fluct_rh = 10
   ),
   A2 = list(
-    annual_temp = NULL,  # If NULL, will use Average_T from Averages table (excluding outliers)
-    annual_rh = NULL,    # If NULL, will use Average_RH from Averages table (excluding outliers)
+    annual_temp = NULL,
+    annual_rh = NULL,
     temp_limits = c(10, 25),
     rh_limits = c(35, 65),
     seasonal_temp = c(-10, 5),
@@ -1093,9 +1167,9 @@ climate_classes <- list(
     fluct_rh = 20
   ),
   B = list(
-    annual_temp = NULL,  # If NULL, will use Average_T from Averages table (excluding outliers)
-    annual_rh = NULL,    # If NULL, will use Average_RH from Averages table (excluding outliers)
-    temp_limits = c(-Inf, 30),
+    annual_temp = NULL,
+    annual_rh = NULL,
+    temp_limits = c(NA, 30),
     rh_limits = c(30, 70),
     seasonal_temp = c(-20, 10),
     seasonal_rh = c(-10, 10),
@@ -1103,9 +1177,9 @@ climate_classes <- list(
     fluct_rh = 20
   ),
   C = list(
-    annual_temp = NULL,  # If NULL, will use Average_T from Averages table (excluding outliers)
-    annual_rh = NULL,    # If NULL, will use Average_RH from Averages table (excluding outliers)
-    temp_limits = c(-Inf, 40),
+    annual_temp = NULL,
+    annual_rh = NULL,
+    temp_limits = c(NA, 40),
     rh_limits = c(25, 75),
     seasonal_temp = NULL,
     seasonal_rh = NULL,
@@ -1121,10 +1195,10 @@ climate_classes <- list(
     )
   ),
   D = list(
-    annual_temp = NULL,  # If NULL, will use Average_T from Averages table (excluding outliers)
-    annual_rh = NULL,    # If NULL, will use Average_RH from Averages table (excluding outliers)
-    temp_limits = c(-Inf, Inf),
-    rh_limits = c(-Inf, 75),
+    annual_temp = NULL,
+    annual_rh = NULL,
+    temp_limits = c(NA, NA),
+    rh_limits = c(NA, 75),
     seasonal_temp = NULL,
     seasonal_rh = NULL,
     fluct_temp = NULL,
@@ -1135,27 +1209,28 @@ climate_classes <- list(
     )
   ),
   BIZOT = list(
-    annual_temp = NULL,  # If NULL, will use Average_T from Averages table (excluding outliers)
-    annual_rh = NULL,    # If NULL, will use Average_RH from Averages table (excluding outliers)
+    annual_temp = NULL,
+    annual_rh = NULL,
     temp_limits = c(16, 25),
     rh_limits = c(45, 55),
     seasonal_temp = NULL,
     seasonal_rh = NULL,
     fluct_temp = NULL,
     fluct_rh = 20
-  ),
-  # *** MODIfy VARIABLES IF NEED FOR CUSTOM ANALYSIS ***
-  # CUSTOM = list(
-  # annual_temp = NA,    
-  # annual_rh = NA,
-  # temp_limits = c(NA, NA),
-  # rh_limits = c(NA, NA),
-  # seasonal_temp = c(NA, NA),
-  # seasonal_rh = c(NA, NA),
-  # fluct_temp = NA,
-  # fluct_rh = NA
-  # )
+  )
 )
+# *** MODIFY VARIABLES IF NEED FOR CUSTOM ANALYSIS ***
+# Custom class can be added later using:
+# climate_classes$CUSTOM <- list(
+#   annual_temp = NA,    
+#   annual_rh = NA,
+#   temp_limits = c(NA, NA),
+#   rh_limits = c(NA, NA),
+#   seasonal_temp = c(NA, NA),
+#   seasonal_rh = c(NA, NA),
+#   fluct_temp = NA,
+#   fluct_rh = NA
+# )
 
 # **** CREATE LIST OF COOL-COLD-FROZEN SPECIFIC GUIDELINES TO DOCUMENT METHOD ****
 # Define special storage criteria
@@ -1180,5 +1255,219 @@ special_storage <- list(
   )
 )
 
-# STEP 7: CALCULATE COMPLIANCE
+# STEP 7: CALCULATE MAX AND MIN T AND RH FOR ALL CLIMATE CLASSES
 # ------------------------------------
+# **** CREATE LIST OF COOL-COLD-FROZEN SPECIFIC GUIDELINES TO DOCUMENT METHOD ****
+# Define special storage criteria
+
+# Helper function to calculate annual averages from full years
+calculate_annual_average <- function(avg_data) {
+  # Get year columns
+  year_cols <- grep("^Year_", names(avg_data), value = TRUE)
+  
+  # Get Average_T and Average_RH rows for full years only
+  temp_avg <- as.numeric(avg_data[avg_data$Metric == "Average_T", year_cols])
+  rh_avg <- as.numeric(avg_data[avg_data$Metric == "Average_RH", year_cols])
+  
+  # Calculate means
+  list(
+    temp = mean(temp_avg, na.rm = TRUE),
+    rh = mean(rh_avg, na.rm = TRUE)
+  )
+}
+
+# Helper function to constrain values within limits
+constrain_to_limits <- function(value, min_limit, max_limit) {
+  if(is.infinite(min_limit)) min_limit <- value
+  if(is.infinite(max_limit)) max_limit <- value
+  min(max(value, min_limit), max_limit)
+}
+
+# Helper function formatting, NA values and decimals
+format_value <- function(x) {
+  if(is.infinite(x)) {
+    return(NA)
+  } else {
+    return(round(x, 1))
+  }
+}
+
+# Main calculation function
+calculate_climate_limits <- function(location_number, avg_data, climate_class, class_name) {
+  # Get annual average (either fixed or calculated)
+  annual_avg <- list(
+    temp = if(!is.null(climate_class$annual_temp)) {
+      climate_class$annual_temp
+    } else {
+      calculate_annual_average(avg_data)$temp
+    },
+    rh = if(!is.null(climate_class$annual_rh)) {
+      climate_class$annual_rh
+    } else {
+      calculate_annual_average(avg_data)$rh
+    }
+  )
+  
+  # Calculate seasonal limits and constrain to outer limits
+  seasonal_limits <- list(
+    temp = list(
+      min = if(!is.null(climate_class$seasonal_temp)) {
+        constrain_to_limits(
+          annual_avg$temp + climate_class$seasonal_temp[1],
+          climate_class$temp_limits[1],
+          climate_class$temp_limits[2]
+        )
+      } else {
+        climate_class$temp_limits[1]
+      },
+      max = if(!is.null(climate_class$seasonal_temp)) {
+        constrain_to_limits(
+          annual_avg$temp + climate_class$seasonal_temp[2],
+          climate_class$temp_limits[1],
+          climate_class$temp_limits[2]
+        )
+      } else {
+        climate_class$temp_limits[2]
+      }
+    ),
+    rh = list(
+      min = if(!is.null(climate_class$seasonal_rh)) {
+        constrain_to_limits(
+          annual_avg$rh + climate_class$seasonal_rh[1],
+          climate_class$rh_limits[1],
+          climate_class$rh_limits[2]
+        )
+      } else {
+        climate_class$rh_limits[1]
+      },
+      max = if(!is.null(climate_class$seasonal_rh)) {
+        constrain_to_limits(
+          annual_avg$rh + climate_class$seasonal_rh[2],
+          climate_class$rh_limits[1],
+          climate_class$rh_limits[2]
+        )
+      } else {
+        climate_class$rh_limits[2]
+      }
+    )
+  )
+  
+  # Add daily fluctuations
+  final_limits <- list(
+    temp = list(
+      min = if(!is.null(climate_class$fluct_temp)) {
+        seasonal_limits$temp$min - climate_class$fluct_temp/2
+      } else {
+        seasonal_limits$temp$min
+      },
+      max = if(!is.null(climate_class$fluct_temp)) {
+        seasonal_limits$temp$max + climate_class$fluct_temp/2
+      } else {
+        seasonal_limits$temp$max
+      }
+    ),
+    rh = list(
+      min = if(!is.null(climate_class$fluct_rh)) {
+        seasonal_limits$rh$min - climate_class$fluct_rh/2
+      } else {
+        seasonal_limits$rh$min
+      },
+      max = if(!is.null(climate_class$fluct_rh)) {
+        seasonal_limits$rh$max + climate_class$fluct_rh/2
+      } else {
+        seasonal_limits$rh$max
+      }
+    )
+  )
+  
+  # Return results
+  list(
+    class_name = class_name,
+    annual_avg = annual_avg,
+    seasonal_limits = seasonal_limits,
+    final_limits = final_limits,
+    criteria = list(
+      temp_limits = climate_class$temp_limits,
+      rh_limits = climate_class$rh_limits,
+      seasonal_temp = climate_class$seasonal_temp,
+      seasonal_rh = climate_class$seasonal_rh,
+      fluct_temp = climate_class$fluct_temp,
+      fluct_rh = climate_class$fluct_rh
+    )
+  )
+}
+
+# Function to process all classes for a location
+process_location <- function(location_number, prefix, location_name) {
+  # Get required data
+  avg_data <- get(paste0("Loc", location_number, "_Avg"))
+  
+  # Process climate classes
+  clim_results <- lapply(names(climate_classes), function(class_name) {
+    calculate_climate_limits(location_number, avg_data, 
+                             climate_classes[[class_name]], class_name)
+  })
+  names(clim_results) <- names(climate_classes)
+  
+  # Process storage classes
+  stor_results <- lapply(names(special_storage), function(class_name) {
+    calculate_climate_limits(location_number, avg_data, 
+                             special_storage[[class_name]], class_name)
+  })
+  names(stor_results) <- names(special_storage)
+  
+  # Save to R environment
+  assign(paste0("Loc", location_number, "_ClimClass"), clim_results, 
+         envir = .GlobalEnv)
+  assign(paste0("Loc", location_number, "_StorClass"), stor_results, 
+         envir = .GlobalEnv)
+  
+  # Convert to data frames for CSV export
+  create_output_df <- function(results) {
+    df <- data.frame(
+      Class = names(results),
+      Annual_Avg_T = sapply(results, function(x) format_value(x$annual_avg$temp)),
+      Annual_Avg_RH = sapply(results, function(x) format_value(x$annual_avg$rh)),
+      Min_T = sapply(results, function(x) format_value(x$final_limits$temp$min)),
+      Max_T = sapply(results, function(x) format_value(x$final_limits$temp$max)),
+      Min_RH = sapply(results, function(x) format_value(x$final_limits$rh$min)),
+      Max_RH = sapply(results, function(x) format_value(x$final_limits$rh$max))
+    )
+    
+    # Ensure all numeric columns are rounded to 1 decimal place
+    numeric_cols <- sapply(df, is.numeric)
+    df[numeric_cols] <- lapply(df[numeric_cols], function(x) round(x, 1))
+    
+    return(df)
+  }
+  
+  # Save CSVs
+  clim_df <- create_output_df(clim_results)
+  stor_df <- create_output_df(stor_results)
+  
+  write.csv(clim_df, 
+            file.path(dir_registry$paths$num_results, "4-3_ASHRAE",
+                      paste0(prefix, "_Loc", location_number, "_", 
+                             location_name, "_ClimClass.csv")),
+            row.names = FALSE)
+  
+  write.csv(stor_df, 
+            file.path(dir_registry$paths$num_results, "4-4_OtherGuidelines",
+                      paste0(prefix, "_Loc", location_number, "_", 
+                             location_name, "_StorClass.csv")),
+            row.names = FALSE)
+  
+  return(list(climate = clim_results, storage = stor_results))
+}
+
+# Process all locations
+process_all_locations <- function() {
+  for(i in 1:nrow(location_names)) {
+    process_location(location_names$Loc_number[i], 
+                     prefix, 
+                     location_names$Loc_name[i])
+  }
+}
+
+# Run the processing
+process_all_locations()
