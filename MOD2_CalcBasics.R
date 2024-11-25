@@ -90,7 +90,7 @@
 # STEP 1: FILE VERIFICATION AND INITIAL SETUP
 # ------------------------------------
 # Load required packages
-required_packages <- c("dplyr", "openxlsx", "crayon", "lubridate", "zoo", "purrr")
+required_packages <- c("dplyr", "openxlsx", "crayon", "lubridate", "zoo", "purrr", "tidyr")
 lapply(required_packages, function(pkg) {
   if (!require(pkg, character.only = TRUE)) {
     install.packages(pkg, dependencies = TRUE)
@@ -1257,8 +1257,12 @@ special_storage <- list(
 
 # STEP 7: CALCULATE MAX AND MIN T AND RH FOR ALL CLIMATE CLASSES
 # ------------------------------------
-# **** CREATE LIST OF COOL-COLD-FROZEN SPECIFIC GUIDELINES TO DOCUMENT METHOD ****
-# Define special storage criteria
+# **** CREATE LIST FOR DIFFERENT STEPS OF CALCULATION TO DOCUMENT METHOD ****
+# This follows the proposed dataframe on a psychrometric chart as displayed in the ASHRAE handbook, chapter 24:
+# First the annual average is calculated from the full years present - Unless if fixed
+# Allowed seasonal fluctuations are added
+# A check is performed to see of they don't surpass the long term outer limits
+# Short term fluctuations are added on of the T and RH min and max.
 
 # Helper function to calculate annual averages from full years
 calculate_annual_average <- function(avg_data) {
@@ -1471,3 +1475,283 @@ process_all_locations <- function() {
 
 # Run the processing
 process_all_locations()
+
+# STEP 8: CALCULATE COMPLIANCE WITH CLIMATE CLASSES AND STORAGE CLASSES
+# ------------------------------------
+# Helper function to handle infinite limits
+handle_limit <- function(x, is_min = TRUE) {
+  if(is.na(x)) return(if(is_min) -Inf else Inf)
+  return(x)
+}
+
+# Function to calculate compliance percentages
+calculate_compliance <- function(data, limits, loc_num) {
+  temp_col <- paste0("Ti", loc_num)
+  rh_col <- paste0("RHi", loc_num)
+  
+  clean_data <- data %>%
+    mutate(
+      temp_clean = remove_outliers(!!sym(temp_col)),
+      rh_clean = remove_outliers(!!sym(rh_col))
+    )
+  
+  # Handle infinite limits
+  min_t <- handle_limit(limits$Min_T, TRUE)
+  max_t <- handle_limit(limits$Max_T, FALSE)
+  min_rh <- handle_limit(limits$Min_RH, TRUE)
+  max_rh <- handle_limit(limits$Max_RH, FALSE)
+  
+  results <- clean_data %>%
+    mutate(
+      all_ok = temp_clean >= min_t & temp_clean <= max_t & 
+        rh_clean >= min_rh & rh_clean <= max_rh,
+      t_high = temp_clean > max_t & 
+        rh_clean >= min_rh & rh_clean <= max_rh,
+      t_low = temp_clean < min_t & 
+        rh_clean >= min_rh & rh_clean <= max_rh,
+      rh_high = rh_clean > max_rh & 
+        temp_clean >= min_t & temp_clean <= max_t,
+      rh_low = rh_clean < min_rh & 
+        temp_clean >= min_t & temp_clean <= max_t,
+      both_high = temp_clean > max_t & rh_clean > max_rh,
+      both_low = temp_clean < min_t & rh_clean < min_rh,
+      t_high_rh_low = temp_clean > max_t & rh_clean < min_rh,
+      t_low_rh_high = temp_clean < min_t & rh_clean > max_rh
+    )
+  
+  percentages <- sapply(c("all_ok", "t_high", "t_low", "rh_high", "rh_low", 
+                          "both_high", "both_low", "t_high_rh_low", "t_low_rh_high"), 
+                        function(col) {
+                          val <- mean(results[[col]], na.rm = TRUE) * 100
+                          if(is.nan(val)) NA else round(val, 2)
+                        })
+  
+  percentages
+}
+
+# Function to create yearly results including merged winter seasons
+create_yearly_results <- function(location_data, class_limits, loc_num) {
+  years <- unique(year(location_data$DateTime))
+  results <- data.frame()
+  
+  for(y in years) {
+    # Get data for current year
+    year_data <- location_data[year(location_data$DateTime) == y,]
+    year_results <- calculate_compliance(year_data, class_limits, loc_num)
+    
+    # Handle winter season specially (combine end and start of year)
+    seasons <- c("Winter", "Spring", "Summer", "Autumn")
+    season_results <- lapply(seasons, function(s) {
+      if(s == "Winter") {
+        winter_data <- rbind(
+          year_data[year_data$Season == "Winter",],
+          location_data[year(location_data$DateTime) == y+1 & 
+                          location_data$Season == "Winter",]
+        )
+        if(nrow(winter_data) > 0) {
+          calculate_compliance(winter_data, class_limits, loc_num)
+        } else {
+          rep(NA, 9)
+        }
+      } else {
+        season_data <- year_data[year_data$Season == s,]
+        if(nrow(season_data) > 0) {
+          calculate_compliance(season_data, class_limits, loc_num)
+        } else {
+          rep(NA, 9)
+        }
+      }
+    })
+    
+    # Combine results
+    results <- rbind(results, 
+                     data.frame(
+                       Year = y,
+                       Season = c("All", seasons),
+                       rbind(
+                         year_results,
+                         do.call(rbind, season_results)
+                       )
+                     ))
+  }
+  
+  # Add full period analysis
+  all_results <- calculate_compliance(location_data, class_limits, loc_num)
+  
+  # Calculate seasonal totals for full period
+  season_totals <- lapply(seasons, function(s) {
+    season_data <- location_data[location_data$Season == s,]
+    calculate_compliance(season_data, class_limits, loc_num)
+  })
+  
+  full_period <- data.frame(
+    Year = "All data (full years)",
+    Season = c("All", seasons),
+    rbind(
+      all_results,
+      do.call(rbind, season_totals)
+    )
+  )
+  
+  results <- rbind(results, full_period)
+  
+  return(results)
+}
+
+# Main function to analyze all locations
+analyze_all_locations <- function(dir_registry, prefix) {
+  loc_objects <- ls(pattern = "^Loc\\d+$", envir = .GlobalEnv)
+  summary_data <- data.frame()
+  
+  for(loc_name in loc_objects) {
+    loc_number <- as.numeric(gsub("Loc", "", loc_name))
+    location_data <- get(loc_name, envir = .GlobalEnv)
+    loc_full_name <- paste(loc_name, location_names$Loc_name[loc_number], sep=" - ")
+    
+    # Process climate classes
+    clim_class <- get(paste0(loc_name, "_ClimClass"), envir = .GlobalEnv)
+    for(class_name in names(clim_class)) {
+      limits <- data.frame(
+        Min_T = clim_class[[class_name]]$final_limits$temp$min,
+        Max_T = clim_class[[class_name]]$final_limits$temp$max,
+        Min_RH = clim_class[[class_name]]$final_limits$rh$min,
+        Max_RH = clim_class[[class_name]]$final_limits$rh$max
+      )
+      
+      # Calculate compliance
+      results <- create_yearly_results(location_data, limits, loc_number)
+      results$Location <- loc_full_name
+      results$Class <- class_name
+      
+      # Remove NA years
+      results <- results[!is.na(results$Year), ]
+      
+      # Create file name and header
+      file_name <- sprintf("%s_Loc%d_%s_Compat%s.csv",
+                           prefix, loc_number,
+                           location_names$Loc_name[loc_number],
+                           class_name)
+      
+      header <- sprintf("%s - Compliance with climate class %s", loc_full_name, class_name)
+      
+      write.csv(results,
+                file.path(dir_registry$paths$num_results, "4-3_ASHRAE", file_name),
+                row.names = FALSE,
+                fileEncoding = "UTF-8",
+                na = "NA")
+      
+      # Store for summary
+      all_data_row <- subset(results, Year == "All data (full years)" & Season == "All")
+      if(nrow(all_data_row) > 0) {
+        summary_data <- rbind(summary_data, 
+                              data.frame(Location = loc_full_name,
+                                         Class = class_name,
+                                         Compliance = as.numeric(all_data_row$all_ok)))
+      }
+      
+      # Save in R environment
+      assign(paste0("Loc", loc_number, "_Compat", class_name), 
+             results, 
+             envir = .GlobalEnv)
+    }
+    
+    # Process storage classes
+    stor_class <- get(paste0(loc_name, "_StorClass"), envir = .GlobalEnv)
+    for(class_name in names(stor_class)) {
+      limits <- data.frame(
+        Min_T = stor_class[[class_name]]$final_limits$temp$min,
+        Max_T = stor_class[[class_name]]$final_limits$temp$max,
+        Min_RH = stor_class[[class_name]]$final_limits$rh$min,
+        Max_RH = stor_class[[class_name]]$final_limits$rh$max
+      )
+      
+      results <- create_yearly_results(location_data, limits, loc_number)
+      results$Location <- loc_full_name
+      results$Class <- paste0("Storage_", class_name)
+      
+      results <- results[!is.na(results$Year), ]
+      
+      file_name <- sprintf("%s_Loc%d_%s_Compat%s.csv",
+                           prefix, loc_number,
+                           location_names$Loc_name[loc_number],
+                           class_name)
+      
+      header <- sprintf("%s - Compliance with storage class %s", loc_full_name, class_name)
+      
+      results <- rbind(
+        data.frame(
+          Year="", Season="", all_ok="", t_high="", t_low="", rh_high="", rh_low="",
+          both_high="", both_low="", t_high_rh_low="", t_low_rh_high="", 
+          Location=header, Class="", stringsAsFactors=FALSE
+        ),
+        results
+      )
+      
+      write.csv(results,
+                file.path(dir_registry$paths$num_results, "4-4_OtherGuidelines", file_name),
+                row.names = FALSE,
+                fileEncoding = "UTF-8",
+                na = "NA")
+      
+      all_data_row <- subset(results, Year == "All data (full years)" & Season == "All")
+      if(nrow(all_data_row) > 0) {
+        summary_data <- rbind(summary_data, 
+                              data.frame(Location = loc_full_name,
+                                         Class = paste0("Storage_", class_name),
+                                         Compliance = as.numeric(all_data_row$all_ok)))
+      }
+      
+      assign(paste0("Loc", loc_number, "_Compat", class_name), 
+             results, 
+             envir = .GlobalEnv)
+    }
+  }
+  
+  # Create ordered climate class columns
+  class_order <- c("AA", "A1", "A2", "B", "BIZOT", "C", "D")
+  storage_order <- c("Cool", "Cold", "Frozen")
+  
+  # Create climate summary
+  climate_summary <- summary_data[!grepl("^Storage_", summary_data$Class), ]
+  climate_wide <- reshape2::dcast(climate_summary,
+                                  Location ~ Class, 
+                                  value.var = "Compliance",
+                                  fun.aggregate = function(x) x[1])
+  
+  # Reorder columns
+  climate_wide <- climate_wide[, c("Location", class_order[class_order %in% names(climate_wide)])]
+  names(climate_wide)[1] <- "All rooms - Climate classes compliance - All classes"
+  
+  # Create storage summary
+  storage_summary <- summary_data[grepl("^Storage_", summary_data$Class), ]
+  storage_summary$Class <- gsub("^Storage_", "", storage_summary$Class)
+  storage_wide <- reshape2::dcast(storage_summary,
+                                  Location ~ Class, 
+                                  value.var = "Compliance",
+                                  fun.aggregate = function(x) x[1])
+  
+  # Reorder storage columns
+  storage_wide <- storage_wide[, c("Location", storage_order[storage_order %in% names(storage_wide)])]
+  names(storage_wide)[1] <- "All rooms - Storage classes compliance - All classes"
+  
+  # Save summary tables
+  write.csv(climate_wide,
+            file.path(dir_registry$paths$num_results, "4-3_ASHRAE",
+                      paste0(prefix, "_LocAll_CompatClimClass.csv")),
+            row.names = FALSE,
+            na = "NA")
+  
+  write.csv(storage_wide,
+            file.path(dir_registry$paths$num_results, "4-4_OtherGuidelines",
+                      paste0(prefix, "_LocAll_CompatStor.csv")),
+            row.names = FALSE,
+            na = "NA")
+  
+  # For individual files, replace the header addition with:
+  header <- sprintf("%s - Compliance with climate class %s", loc_full_name, class_name)
+  names(results)[1] <- header
+  
+  return(list(climate = climate_wide, storage = storage_wide))
+}
+
+results <- analyze_all_locations(dir_registry, prefix)
