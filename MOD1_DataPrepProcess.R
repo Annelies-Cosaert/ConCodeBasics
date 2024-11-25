@@ -411,9 +411,11 @@ end_year <- year(max(BUILDING_h$DateTime, na.rm = TRUE))
 
 # Download and process weather data
 WEATHER <- tryCatch({
+  # First download the raw weather data
   weather_raw <- importNOAA(code = station_id, year = start_year:end_year, hourly = TRUE)
   
-  weather_raw %>%
+  # Then process it with the desired columns
+  processed_weather <- weather_raw %>%
     mutate(
       DateTime = floor_date(as.POSIXct(date), unit = "hour")
     ) %>%
@@ -429,15 +431,16 @@ WEATHER <- tryCatch({
     mutate(across(where(is.numeric), ~round(as.numeric(.), 2))) %>%
     filter(DateTime >= min(BUILDING_h$DateTime, na.rm = TRUE) & 
              DateTime <= max(BUILDING_h$DateTime, na.rm = TRUE))
+  
+  # Return the processed weather data
+  processed_weather
+  
 }, error = function(e) {
   cat("\nProblem with weather data. Check your internet connection.\n")
   stop(e)
 }, finally = {
   options(timeout = old_timeout)  # Reset timeout
 })
-
-
-WEATHER <- stations_meta  # Assign the processed data to WEATHER
 
 # STEP 7: DEFINE LOCATION NAMES
 # --------------------------
