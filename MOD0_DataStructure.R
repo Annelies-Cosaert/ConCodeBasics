@@ -53,8 +53,9 @@ create_analysis_directories <- function(base_dir, prefix) {
       subdirs = list(
         "4-1_Averages" = "Statistical averages per location (MOD2)",
         "4-2_WeatherExtremes" = "Extreme weather event analysis (MOD2)",
-        "4-3_ASHRAE" = "ASHRAE guideline analysis (MOD2)",
-        "4-4_OtherGuidelines" = "Additional guidelines analysis (MOD2)"
+        "4-3_ClimateClassThresholds" = "Determines the T/RH avg/max/min for every climate class (MOD2)",
+        "4-4_ASHRAE" = "ASHRAE guideline compatibility analysis (MOD2)",
+        "4-5_OtherGuidelines" = "Additional guidelines, (cold, cool, frozen) analysis (MOD2)"
       )
     ),
     "05_BasicVisRes" = list(

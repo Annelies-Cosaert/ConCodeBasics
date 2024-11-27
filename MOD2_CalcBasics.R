@@ -1260,7 +1260,7 @@ special_storage <- list(
 # **** CREATE LIST FOR DIFFERENT STEPS OF CALCULATION TO DOCUMENT METHOD ****
 # This follows the proposed dataframe on a psychrometric chart as displayed in the ASHRAE handbook, chapter 24:
 # First the annual average is calculated from the full years present - Unless if fixed
-# Allowed seasonal fluctuations are added
+# Allowed seasonal fluctuations are added (and therefore only considered indirectly - Analysis for fluctuations in MOD3)
 # A check is performed to see of they don't surpass the long term outer limits
 # Short term fluctuations are added on of the T and RH min and max.
 
@@ -1450,13 +1450,13 @@ process_location <- function(location_number, prefix, location_name) {
   stor_df <- create_output_df(stor_results)
   
   write.csv(clim_df, 
-            file.path(dir_registry$paths$num_results, "4-3_ASHRAE",
+            file.path(dir_registry$paths$num_results, "4-3_ClimateClassThresholds",
                       paste0(prefix, "_Loc", location_number, "_", 
                              location_name, "_ClimClass.csv")),
             row.names = FALSE)
   
   write.csv(stor_df, 
-            file.path(dir_registry$paths$num_results, "4-4_OtherGuidelines",
+            file.path(dir_registry$paths$num_results, "4-3_ClimateClassThresholds",
                       paste0(prefix, "_Loc", location_number, "_", 
                              location_name, "_StorClass.csv")),
             row.names = FALSE)
@@ -1635,7 +1635,7 @@ analyze_all_locations <- function(dir_registry, prefix) {
       header <- sprintf("%s - Compliance with climate class %s", loc_full_name, class_name)
       
       write.csv(results,
-                file.path(dir_registry$paths$num_results, "4-3_ASHRAE", file_name),
+                file.path(dir_registry$paths$num_results, "4-4_ASHRAE", file_name),
                 row.names = FALSE,
                 fileEncoding = "UTF-8",
                 na = "NA")
@@ -1688,7 +1688,7 @@ analyze_all_locations <- function(dir_registry, prefix) {
       )
       
       write.csv(results,
-                file.path(dir_registry$paths$num_results, "4-4_OtherGuidelines", file_name),
+                file.path(dir_registry$paths$num_results, "4-5_OtherGuidelines", file_name),
                 row.names = FALSE,
                 fileEncoding = "UTF-8",
                 na = "NA")
@@ -1736,13 +1736,13 @@ analyze_all_locations <- function(dir_registry, prefix) {
   
   # Save summary tables
   write.csv(climate_wide,
-            file.path(dir_registry$paths$num_results, "4-3_ASHRAE",
+            file.path(dir_registry$paths$num_results, "4-4_ASHRAE",
                       paste0(prefix, "_LocAll_CompatClimClass.csv")),
             row.names = FALSE,
             na = "NA")
   
   write.csv(storage_wide,
-            file.path(dir_registry$paths$num_results, "4-4_OtherGuidelines",
+            file.path(dir_registry$paths$num_results, "4-5_OtherGuidelines",
                       paste0(prefix, "_LocAll_CompatStor.csv")),
             row.names = FALSE,
             na = "NA")
