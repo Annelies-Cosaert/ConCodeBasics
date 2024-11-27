@@ -2,8 +2,8 @@
 # =======================================
 
 # OVERVIEW:
-# This module builds on Module 1's outputs to perform statistical analysis
-# and generate conservation-related calculations.
+# This module builds on Module 1's outputs to perform statistical analysis,
+# identify extreme weather events, and evaluate climate class compliance.
 
 # REQUIRED MODIFICATIONS FOR NEW ANALYSIS:
 # marked with: *** MODIFY ... FOR NEW ANALYSIS ***
@@ -17,72 +17,65 @@
 # 4. List of other guideline specifics
 
 # PROCESSING STEPS:
-# 1. Initial Setup and Verification
-#    - Load required packages (dplyr, openxlsx, crayon, lubridate, zoo)
+# 1. Initial Setup and File Verification
+#    - Load required packages
 #    - Verify Module 1 outputs exist
-#    - Set up color schemes for visualizations
+#    - Load directory registry
 #    - Initialize statistical functions
 
-# 2. Period Analysis
+# 2. Year Analysis
 #    - Identify complete calendar years
 #    - Calculate rolling year periods (364-day intervals)
-#    - Validate data completeness for each period
 #    - Generate period summaries for each location
+#    - Validate data completeness
+#    - Visualize year splits and coverage
 
-# 3. Statistical Calculations
-#    - Process yearly statistics:
-#      * Temperature and humidity averages
-#      * Seasonal breakdowns
+# 3. Statistical Analysis
+#    - Process yearly and seasonal statistics:
+#      * Temperature and humidity averages/medians
 #      * Min/max values with outlier removal
 #      * Standard deviations
-#    - Calculate data quality metrics:
-#      * Missing data percentages
-#      * Outlier frequencies
-#      * Data completeness scores
+#      * Data quality metrics
+#    - Generate comprehensive statistics tables
+#    - Export location-specific results
 
-# 4. Table Generation
-#    - Create comprehensive statistics tables
-#    - Format data with proper decimal places
-#    - Add seasonal classifications
-#    - Generate summary statistics:
-#      * Annual averages
-#      * Seasonal patterns
-#      * Data quality indicators
+# 4. Fluctuation Analysis
+#    - Calculate daily (24h) fluctuations
+#    - Calculate weekly (7d) fluctuations
+#    - Generate fluctuation tables and summaries
+#    - Export fluctuation data for visualization
 
-# 5. File Outputs (saved to Numeric_Results directory):
-#    - [filename]_Loc[x]_[name]_Averages.csv: Statistical analysis results
-#    - Contains:
-#      * Date ranges
-#      * Temperature statistics
-#      * Humidity statistics
-#      * Seasonal breakdowns
-#      * Quality metrics
+# 5. Extreme Weather Analysis
+#    - Identify heatwaves (5+ days ≥25°C with 3 days ≥30°C)
+#    - Identify cold periods (based on 5-day rolling averages)
+#    - Analyze dry periods (200+ hours without rain)
+#    - Analyze wet periods (>10mm/12h precipitation)
+#    - Identify humid periods (7-day RH average >85%)
 
-# 6. Quality Control and Reporting
-#    - Validate statistical calculations
-#    - Check for data completeness
-#    - Generate quality control reports
-#    - Produce data visualization outputs
-#    - Create summary of findings
+# 6. Climate Class Analysis
+#    - Define ASHRAE climate class criteria (AA through D)
+#    - Define BIZOT guidelines
+#    - Define special storage criteria (Cool, Cold, Frozen)
+#    - Calculate climate class thresholds
+#    - Generate threshold tables for each location
 
-# VARIABLES AND METRICS:
-# Statistical Metrics:
-# - avg_[param]: Average value for parameter
-# - med_[param]: Median value for parameter
-# - sd_[param]: Standard deviation
-# - max_[param]: Maximum value (outliers removed)
-# - min_[param]: Minimum value (outliers removed)
+# 7. Compliance Analysis
+#    - Calculate compliance percentages for each climate class
+#    - Analyze seasonal compliance patterns
+#    - Generate yearly compliance reports
+#    - Create summary tables for all locations
+#    - Export compliance results for visualization
 
-# Seasonal Classifications:
-# - winter_[param]: Winter season metrics
-# - spring_[param]: Spring season metrics
-# - summer_[param]: Summer season metrics
-# - autumn_[param]: Autumn season metrics
-
-# Quality Metrics:
-# - na_pct: Percentage of missing values
-# - outliers_pct: Percentage of outliers
-# - completeness: Data completeness score
+# File Outputs:
+# - [filename]_Loc[x]_[name]_Averages.csv: Statistical analysis
+# - [filename]_Loc[x]_24hFluct.csv: Daily fluctuations
+# - [filename]_Loc[x]_7dFluct.csv: Weekly fluctuations
+# - [filename]_Weather_[type].csv: Extreme weather events
+# - [filename]_Loc[x]_[name]_ClimClass.csv: Climate class thresholds
+# - [filename]_Loc[x]_[name]_StorClass.csv: Storage class thresholds
+# - [filename]_Loc[x]_[name]_Compat[class].csv: Class compliance
+# - [filename]_LocAll_CompatClimClass.csv: Overall climate compliance
+# - [filename]_LocAll_CompatStor.csv: Overall storage compliance
 
 # Functions return NA for insufficient data (< 95% completeness)
 # Outliers determined using 1.5 IQR method
