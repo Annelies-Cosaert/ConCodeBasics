@@ -1,3 +1,41 @@
+# MODULE 3: BASIC VISUAL REPRESENTATIONS: T, RH and OTHER DERIVATIVES
+# MODULE 3-1: TIME PLOTS
+# =======================================
+
+# OVERVIEW:
+# This module uses the data generated in MOD1 and MOD2 in order to create time plots
+# The plots created visualize data without additional interpretations. Aka, no risk related collections are performed.
+
+# REQUIRED MODIFICATIONS FOR NEW ANALYSIS:
+# marked with: *** MODIFY ... FOR NEW ANALYSIS ***
+# 1. For custom time frame analysis: insert start date and end date of the analysis.
+
+# IF NEED TO CREATE LIST TO DOCUMENT METHOD 
+# **** CREATE LIST ... TO DOCUMENT METHOD ****
+# None
+
+# PROCESSING STEPS:
+# 1. Initial Setup and File Verification
+#    - Load required packages
+#    - Verify Module 0 outputs exist
+
+# 2. All data Analysis
+#    - Add indoor climate data, weather extremes and fluctuations per lacation
+#    - Format the table
+#    - Save the plots
+
+# 3. Annual analysis
+#    TO-DO
+
+# 4. Create plot for specific time range (optional)
+#    TO-DO
+
+# File Outputs:
+# - [filename]_Loc[x]_[name]_TimePlot.png: Time plot per location (all data)
+
+# STEP 1: FILE VERIFICATION AND INITIAL SETUP
+# ------------------------------------
+
 # Load required packages
 required_packages <- c("ggplot2", "lubridate", "scales", "grid", "gridExtra")
 for(pkg in required_packages) {
@@ -9,6 +47,9 @@ for(pkg in required_packages) {
 
 # Verify prerequisites
 if (!exists("dir_registry")) stop("Directory registry not found. Please run Module 0 first.")
+
+# STEP 2: CREATE PLOTS WITH ALL DATA PER LOCATION
+# ------------------------------------
 
 # Function to create time series plot for climate data
 create_climate_plot <- function(loc_data, loc_number, loc_name, dir_registry, prefix) {
@@ -114,8 +155,8 @@ create_climate_plot <- function(loc_data, loc_number, loc_name, dir_registry, pr
     linetype = c("solid", "solid", "solid",
                  "solid", "solid", "solid",
                  "solid",
-                 "dotted", "dotted",
-                 "solid"),
+                 "solid", "solid",
+                 "dotted"),
     alpha = c(1, 0.5, 0.3,
               1, 0.5, 0.3,
               1,
@@ -196,3 +237,10 @@ create_all_plots <- function() {
 
 # Run the plotting function
 create_all_plots()
+
+# STEP 2: ANNUAL DATA VISUALS
+# ------------------------------------
+
+# STEP 3: COSTUM DATA ANALYSIS
+# ------------------------------------
+
