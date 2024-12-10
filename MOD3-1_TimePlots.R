@@ -61,22 +61,22 @@ create_climate_plot <- function(loc_data, loc_number, loc_name, dir_registry, pr
   p <- ggplot() +
     # Indoor climate data
     geom_line(data = loc_data, aes(x = DateTime, y = get(paste0("Ti", loc_number)), 
-                                   color = "Ti"), size = 0.2) +
+                                   color = "Ti"), size = 0.2, na.rm = TRUE) +
     geom_line(data = loc_data, aes(x = DateTime, y = get(paste0("T24havg", loc_number)), 
-                                   color = "T24havg"), size = 0.2, alpha = 0.5) +
+                                   color = "T24havg"), size = 0.2, alpha = 0.5, na.rm = TRUE) +
     geom_line(data = loc_data, aes(x = DateTime, y = get(paste0("T7davg", loc_number)), 
-                                   color = "T7davg"), size = 0.2, alpha = 0.3) +
+                                   color = "T7davg"), size = 0.2, alpha = 0.3, na.rm = TRUE) +
     geom_line(data = loc_data, aes(x = DateTime, y = get(paste0("RHi", loc_number)), 
-                                   color = "RHi"), size = 0.2) +
+                                   color = "RHi"), size = 0.2, na.rm = TRUE) +
     geom_line(data = loc_data, aes(x = DateTime, y = get(paste0("RH24havg", loc_number)), 
-                                   color = "RH24havg"), size = 0.2, alpha = 0.5) +
+                                   color = "RH24havg"), size = 0.2, alpha = 0.5, na.rm = TRUE) +
     geom_line(data = loc_data, aes(x = DateTime, y = get(paste0("RH7davg", loc_number)), 
-                                   color = "RH7davg"), size = 0.2, alpha = 0.3) +
+                                   color = "RH7davg"), size = 0.2, alpha = 0.3, na.rm = TRUE) +
     geom_line(data = loc_data, aes(x = DateTime, y = get(paste0("Dwpti", loc_number)), 
-                                   color = "Dwpti"), size = 0.2)
+                                   color = "Dwpti"), size = 0.2, na.rm = TRUE)
   
   # Add weather extremes
-  if (exists("Weather_Heatwaves") && nrow(Weather_Heatwaves) > 0) {
+  if (exists("Weather_Heatwaves") && !is.null(Weather_Heatwaves) && nrow(Weather_Heatwaves) > 0) {
     p <- p + geom_rect(data = Weather_Heatwaves,
                        aes(xmin = as.POSIXct(DateTime_from), 
                            xmax = as.POSIXct(DateTime_to),
@@ -84,7 +84,7 @@ create_climate_plot <- function(loc_data, loc_number, loc_name, dir_registry, pr
                        alpha = 0.1)
   }
   
-  if (exists("Weather_Cold") && nrow(Weather_Cold) > 0) {
+  if (exists("Weather_Cold") && !is.null(Weather_Cold) && nrow(Weather_Cold) > 0) {
     p <- p + geom_rect(data = Weather_Cold,
                        aes(xmin = as.POSIXct(DateTime_from), 
                            xmax = as.POSIXct(DateTime_to),
@@ -92,7 +92,7 @@ create_climate_plot <- function(loc_data, loc_number, loc_name, dir_registry, pr
                        alpha = 0.1)
   }
   
-  if (exists("Weather_DryPeriods") && nrow(Weather_DryPeriods) > 0) {
+  if (exists("Weather_DryPeriods") && !is.null(Weather_DryPeriods) && nrow(Weather_DryPeriods) > 0) {
     p <- p + geom_rect(data = Weather_DryPeriods,
                        aes(xmin = as.POSIXct(DateTime_from), 
                            xmax = as.POSIXct(DateTime_to),
@@ -100,14 +100,14 @@ create_climate_plot <- function(loc_data, loc_number, loc_name, dir_registry, pr
                        alpha = 0.1)
   }
   
-  if (exists("Weather_WetPeriods") && nrow(Weather_WetPeriods) > 0) {
+  if (exists("Weather_WetPeriods") && !is.null(Weather_WetPeriods) && nrow(Weather_WetPeriods) > 0) {
     p <- p + geom_vline(data = Weather_WetPeriods,
                         aes(xintercept = as.POSIXct(DateTime), 
                             color = "Heavy precipitation"),
                         linetype = "dotted", size = 0.5)
   }
   
-  if (exists("Weather_HumidPeriods") && nrow(Weather_HumidPeriods) > 0) {
+  if (exists("Weather_HumidPeriods") && !is.null(Weather_HumidPeriods) && nrow(Weather_HumidPeriods) > 0) {
     p <- p + geom_rect(data = Weather_HumidPeriods,
                        aes(xmin = as.POSIXct(DateTime_from), 
                            xmax = as.POSIXct(DateTime_to),
@@ -119,9 +119,9 @@ create_climate_plot <- function(loc_data, loc_number, loc_name, dir_registry, pr
   fluct_data <- get(paste0("Loc", loc_number, "_24hFluct"))
   p <- p +
     geom_line(data = fluct_data, aes(x = as.POSIXct(Date), y = T_fluct, 
-                                     color = "T_fluct"), size = 0.2) +
+                                     color = "T_fluct"), size = 0.2, na.rm = TRUE) +
     geom_line(data = fluct_data, aes(x = as.POSIXct(Date), y = RH_fluct, 
-                                     color = "RH_fluct"), size = 0.2)
+                                     color = "RH_fluct"), size = 0.2, na.rm = TRUE)
   
   # Set colors and legend
   p <- p +
@@ -168,7 +168,7 @@ create_climate_plot <- function(loc_data, loc_number, loc_name, dir_registry, pr
   # Plot appearance
   p <- p +
     labs(title = paste("Location", loc_number, "-", loc_name, "-", years_range,
-                       "\nIndoor - Outdoor"),
+                       "\nIndoor"),
          x = "Date",
          y = "Temperature (°C) / Relative Humidity (%)") +
     scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, 10)) +
@@ -177,9 +177,9 @@ create_climate_plot <- function(loc_data, loc_number, loc_name, dir_registry, pr
     theme(
       panel.background = element_rect(fill = "white", color = NA),
       plot.background = element_rect(fill = "white", color = NA),
-      axis.line = element_line(color = "black", size = 0.2),
-      panel.border = element_rect(color = "black", fill = NA, size = 0.2),
-      panel.grid.major.y = element_line(color = "gray90", size = 0.2),
+      axis.line = element_line(color = "black", linewidth = 0.2),
+      panel.border = element_rect(color = "black", fill = NA, linewidth = 0.2),
+      panel.grid.major.y = element_line(color = "gray90", linewidth = 0.2),
       panel.grid.major.x = element_blank(),
       panel.grid.minor = element_blank(),
       plot.title = element_text(size = 11, face = "bold", hjust = 0.5),

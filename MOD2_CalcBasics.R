@@ -1101,7 +1101,7 @@ extreme_weather <- analyze_weather_extremes(WEATHER, prefix, dir_registry)
 
 # "Short term fluctuation means": 
 # (In the ASHRAE Climate Class table notes) Is ignored. The step by step change of climate monthly is evident. 
-# Because it is not (always) possible to automise this process it should not be a condition. 
+# Because it is not (always) possible to automize this process it should not be a condition. 
 # If natural change is permitted, this process should be present relatively automatic.
 
 # "Stable":
@@ -1126,7 +1126,6 @@ extreme_weather <- analyze_weather_extremes(WEATHER, prefix, dir_registry)
 # However long term fluctuations are seen here and an absolute maximum and minimum with the possibility to visualize fluctuations at later stage.
 # Get from the 'Locx' ('Letterhuis_Loc1_Beelden'), 'Tix' and 'RHix' (Ti1 and 'RHix) columns
 
-# Define all climate class criteria
 # Define all climate class criteria
 climate_classes <- list(
   AA = list(
