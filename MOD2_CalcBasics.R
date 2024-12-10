@@ -239,41 +239,103 @@ validate_period_data <- function(data) {
   return(validation)
 }
 
-analyze_time_periods <- function(data, location_name) {
-  validation <- validate_period_data(data)
-  if (!validation$is_valid) {
-    warning(paste("Validation failed for", location_name, ":", 
-                  paste(validation$messages, collapse = "; ")))
-    return(NULL)
+analyze_time_periods <- function(data, location_name, verbose = TRUE) {
+  # 1. Initial validation
+  if (!("DateTime" %in% names(data))) {
+    stop("Data must contain a DateTime column")
   }
   
+  # 2. Ensure DateTime is POSIXct
   if (!inherits(data$DateTime, "POSIXct")) {
     tryCatch({
-      data$DateTime <- as.POSIXct(data$DateTime)
+      data$DateTime <- as.POSIXct(data$DateTime, tz = "UTC")
     }, error = function(e) {
-      warning(paste("Failed to convert DateTime for", location_name))
-      return(NULL)
+      stop("Could not convert DateTime to POSIXct format. DateTime must be in 'YYYY-MM-DD HH:MM:SS' format.")
     })
   }
   
-  calendar_years <- find_calendar_years(data)
-  rolling_years <- find_rolling_years(data)
+  if (verbose) cat("Analyzing time periods for:", location_name, "\n")
   
-  period_summary <- list(
-    location = location_name,
-    total_period = list(
-      start = min(data$DateTime),
-      end = max(data$DateTime),
-      total_days = as.numeric(difftime(max(data$DateTime), 
-                                       min(data$DateTime), 
-                                       units = "days")) + 1
-    ),
-    calendar_years = calendar_years,
-    rolling_years = rolling_years
+  # 3. Calculate total available period
+  total_period <- list(
+    start = min(data$DateTime, na.rm = TRUE),
+    end = max(data$DateTime, na.rm = TRUE),
+    total_days = as.numeric(difftime(max(data$DateTime, na.rm = TRUE), 
+                                     min(data$DateTime, na.rm = TRUE), 
+                                     units = "days")) + 1
   )
   
-  class(period_summary) <- "period_analysis"
-  return(period_summary)
+  if (verbose) cat("Total period:", format(total_period$start), "to", format(total_period$end), "\n")
+  
+  # 4. Try each period type in order
+  # A. Complete calendar years
+  years <- as.numeric(format(data$DateTime, "%Y"))
+  unique_years <- unique(years)
+  
+  calendar_years <- lapply(unique_years, function(y) {
+    year_data <- data[years == y, ]
+    expected_days <- if(lubridate::leap_year(y)) 366 else 365
+    actual_days <- length(unique(as.Date(year_data$DateTime)))
+    
+    list(
+      year = y,
+      complete = actual_days >= expected_days * 0.99,
+      days = actual_days,
+      expected_days = expected_days
+    )
+  })
+  
+  complete_years <- sapply(calendar_years, function(x) x$complete)
+  
+  if (any(complete_years)) {
+    selected_years <- sapply(calendar_years[complete_years], function(x) x$year)
+    if (verbose) cat("Found complete calendar years:", paste(selected_years, collapse=", "), "\n")
+    return(list(
+      type = "calendar",
+      data = data[year(data$DateTime) %in% selected_years,],
+      period_info = selected_years,
+      total_period = total_period
+    ))
+  }
+  
+  # B. Rolling years (364 days)
+  if (total_period$total_days >= 364) {
+    start_date <- total_period$start
+    end_date <- start_date + lubridate::days(364)
+    
+    if (end_date <= total_period$end) {
+      if (verbose) cat("Using rolling year period\n")
+      return(list(
+        type = "rolling",
+        data = data[data$DateTime >= start_date & data$DateTime <= end_date,],
+        period_info = c(start_date, end_date),
+        total_period = total_period
+      ))
+    }
+  }
+  
+  # C. Fallback: Any 364-day period or complete data
+  if (verbose) cat("Using all available data\n")
+  return(list(
+    type = "partial",
+    data = data,
+    period_info = c(total_period$start, total_period$end),
+    total_period = total_period
+  ))
+}
+
+# Helper function to format period information for display
+format_period_info <- function(period_result) {
+  switch(period_result$type,
+         "calendar" = paste("Calendar years:", paste(period_result$period_info, collapse="-")),
+         "rolling" = paste("Rolling year:", 
+                           format(period_result$period_info[1], "%Y-%m-%d"), 
+                           "to",
+                           format(period_result$period_info[2], "%Y-%m-%d")),
+         "partial" = paste("Partial period:", 
+                           format(period_result$period_info[1], "%Y-%m-%d"),
+                           "to",
+                           format(period_result$period_info[2], "%Y-%m-%d")))
 }
 
 visualize_year_splits <- function(data, location_name) {
@@ -824,7 +886,8 @@ analyze_all_fluctuations(prefix, dir_registry)  # Add this line to run fluctuati
 # Identify humid periods (from RHo column): any period where a 7day rolling average is above 85%
 
 # Function to identify extreme weather periods (3 most extreme events per rolling year based on 3 day median)
-analyze_weather_extremes <- function(weather_data, prefix, registry) {
+
+analyze_weather_extremes <- function(weather_data, prefix, registry) {    
   # Helper function for date formatting
   format_datetime <- function(x) {
     format(as.POSIXct(x), "%Y-%m-%d %H:%M:%S")
@@ -832,188 +895,175 @@ analyze_weather_extremes <- function(weather_data, prefix, registry) {
   
   # 1. Find Dry Periods (>200h)
   find_dry_periods <- function(data) {
-    # Find consecutive dry periods
     dry_runs <- rle(data$Precip == 0)
     run_lengths <- dry_runs$lengths[dry_runs$values]
     end_pos <- cumsum(dry_runs$lengths)[dry_runs$values]
     start_pos <- end_pos - run_lengths + 1
     
-    # Create dataframe of long dry periods
-    tibble(
+    dplyr::tibble(
       start_idx = start_pos,
       end_idx = end_pos,
       duration = run_lengths
-    ) %>%
-      filter(duration > 200) %>%  # Only periods >200 hours
-      mutate(
+    ) |>
+      dplyr::filter(duration > 200) |>
+      dplyr::mutate(
         DateTime_from = format_datetime(data$DateTime[start_idx]),
         DateTime_to = format_datetime(data$DateTime[end_idx]),
         Avg_value = round(duration, 2),
         Unit = "hours without rain"
-      ) %>%
-      select(DateTime_from, DateTime_to, Avg_value, Unit)
+      ) |>
+      dplyr::select(dplyr::all_of(c("DateTime_from", "DateTime_to", "Avg_value", "Unit")))
   }
   
   # 2. Find Wet Periods (>10mm/12h)
   find_wet_periods <- function(data) {
-    data %>%
-      filter(Precip_12h > 10) %>%
-      mutate(
+    data |>
+      dplyr::filter(Precip_12h > 10) |>
+      dplyr::mutate(
         DateTime = format_datetime(DateTime),
         Value = round(Precip_12h, 2),
         Unit = "mm/12h"
-      ) %>%
-      select(DateTime, Value, Unit)
+      ) |>
+      dplyr::select(dplyr::all_of(c("DateTime", "Value", "Unit")))
   }
   
   # 3. Find Heatwaves
   find_heatwaves <- function(data) {
-    # Get daily max temperatures with proper NA handling
-    daily_max <- data %>%
-      group_by(Date = as.Date(DateTime)) %>%
-      summarise(
+    # Get daily max temperatures
+    daily_max <- data |>
+      dplyr::group_by(Date = as.Date(DateTime)) |>  # Changed from lubridate::as.Date
+      dplyr::summarise(
         max_temp = if(all(is.na(To))) NA else max(To, na.rm = TRUE),
         .groups = "drop"
-      ) %>%
-      filter(!is.na(max_temp))  # Remove days with no valid temperatures
+      ) |>
+      dplyr::filter(!is.na(max_temp))
     
     # Find potential heatwave periods
     potential_heatwaves <- data.frame()
     
     for(i in 1:(nrow(daily_max) - 4)) {
-      # Look at 7-day windows (5 days minimum + 2 extra days to check)
       window <- daily_max[i:min(i+6, nrow(daily_max)), ]
-      
-      # Check if we have 5 consecutive days >= 25°C
       consecutive_hot <- sum(window$max_temp >= 25) >= 5
-      # Check if we have at least 3 days >= 30°C in this period
       very_hot_days <- sum(window$max_temp >= 30) >= 3
       
       if(consecutive_hot && very_hot_days) {
-        # This is a heatwave period
-        period_data <- data %>%
-          filter(
+        period_data <- data |>
+          dplyr::filter(
             DateTime >= as.POSIXct(paste(min(window$Date), "00:00:00")),
             DateTime <= as.POSIXct(paste(max(window$Date), "23:59:59"))
           )
         
-        # Create new row
-        new_period <- tibble(
+        new_period <- dplyr::tibble(
           start_date = min(window$Date),
           end_date = max(window$Date),
           max_temp = max(window$max_temp, na.rm = TRUE)
         )
         
-        # Add to potential heatwaves
         potential_heatwaves <- rbind(potential_heatwaves, new_period)
       }
     }
     
-    # If we found any heatwaves, consolidate overlapping periods
     if(nrow(potential_heatwaves) > 0) {
-      # Sort by start date
-      potential_heatwaves <- potential_heatwaves[order(potential_heatwaves$start_date), ]
-      
-      # Consolidate overlapping periods
-      consolidated <- data.frame()
-      current_start <- potential_heatwaves$start_date[1]
-      current_end <- potential_heatwaves$end_date[1]
-      current_max <- potential_heatwaves$max_temp[1]
-      
-      for(i in 2:nrow(potential_heatwaves)) {
-        if(potential_heatwaves$start_date[i] <= current_end + 1) {
-          # Periods overlap or are consecutive, extend current period
-          current_end <- max(current_end, potential_heatwaves$end_date[i])
-          current_max <- max(current_max, potential_heatwaves$max_temp[i])
-        } else {
-          # Add current period to consolidated and start new one
-          consolidated <- rbind(consolidated, 
-                                data.frame(start_date = current_start,
-                                           end_date = current_end,
-                                           max_temp = current_max))
-          current_start <- potential_heatwaves$start_date[i]
-          current_end <- potential_heatwaves$end_date[i]
-          current_max <- potential_heatwaves$max_temp[i]
-        }
-      }
-      
-      # Add last period
-      consolidated <- rbind(consolidated,
-                            data.frame(start_date = current_start,
-                                       end_date = current_end,
-                                       max_temp = current_max))
-      
-      # Create final output format
-      heatwaves <- map_df(1:nrow(consolidated), function(i) {
-        period_data <- data %>%
-          filter(
-            DateTime >= as.POSIXct(paste(consolidated$start_date[i], "00:00:00")),
-            DateTime <= as.POSIXct(paste(consolidated$end_date[i], "23:59:59"))
-          )
-        
-        valid_temps <- period_data$To[!is.na(period_data$To)]
-        
-        tibble(
-          DateTime_from = format_datetime(min(period_data$DateTime)),
-          DateTime_to = format_datetime(max(period_data$DateTime)),
-          Max_value = round(max(valid_temps, na.rm = TRUE), 2),
-          Min_value = round(min(valid_temps, na.rm = TRUE), 2),
-          Avg_value = round(mean(valid_temps, na.rm = TRUE), 2),
-          Days = ceiling(as.numeric(difftime(max(period_data$DateTime),
-                                             min(period_data$DateTime),
-                                             units = "days"))) + 1,  # Rounded up to whole days
-          Unit = "°C"
-        )
-      })
-      
-      return(heatwaves)
-    } else {
-      # Return empty tibble if no heatwaves found
-      return(tibble(
-        DateTime_from = character(),
-        DateTime_to = character(),
-        Max_value = numeric(),
-        Min_value = numeric(),
-        Avg_value = numeric(),
-        Days = integer(),  # Changed to integer for consistency
-        Unit = character()
-      ))
+      potential_heatwaves <- dplyr::arrange(potential_heatwaves, start_date)
+      consolidated <- consolidate_periods(potential_heatwaves, data)
+      return(format_heatwave_output(consolidated, data))
     }
+    
+    # Return empty tibble if no heatwaves
+    return(dplyr::tibble(
+      DateTime_from = character(),
+      DateTime_to = character(),
+      Max_value = numeric(),
+      Min_value = numeric(),
+      Avg_value = numeric(),
+      Days = integer(),
+      Unit = character()
+    ))
+  }
+  
+  # Helper function for consolidating heatwave periods
+  consolidate_periods <- function(potential_periods, data) {
+    result <- data.frame()
+    current_start <- potential_periods$start_date[1]
+    current_end <- potential_periods$end_date[1]
+    current_max <- potential_periods$max_temp[1]
+    
+    for(i in 2:nrow(potential_periods)) {
+      if(potential_periods$start_date[i] <= current_end + 1) {
+        current_end <- max(current_end, potential_periods$end_date[i])
+        current_max <- max(current_max, potential_periods$max_temp[i])
+      } else {
+        result <- rbind(result, 
+                        data.frame(start_date = current_start,
+                                   end_date = current_end,
+                                   max_temp = current_max))
+        current_start <- potential_periods$start_date[i]
+        current_end <- potential_periods$end_date[i]
+        current_max <- potential_periods$max_temp[i]
+      }
+    }
+    
+    result <- rbind(result,
+                    data.frame(start_date = current_start,
+                               end_date = current_end,
+                               max_temp = current_max))
+    return(result)
+  }
+  
+  # Helper function for formatting heatwave output
+  format_heatwave_output <- function(consolidated, data) {
+    purrr::map_dfr(1:nrow(consolidated), function(i) {
+      period_data <- data |>
+        dplyr::filter(
+          DateTime >= as.POSIXct(paste(consolidated$start_date[i], "00:00:00")),
+          DateTime <= as.POSIXct(paste(consolidated$end_date[i], "23:59:59"))
+        )
+      
+      valid_temps <- period_data$To[!is.na(period_data$To)]
+      
+      dplyr::tibble(
+        DateTime_from = format_datetime(min(period_data$DateTime)),
+        DateTime_to = format_datetime(max(period_data$DateTime)),
+        Max_value = round(max(valid_temps, na.rm = TRUE), 2),
+        Min_value = round(min(valid_temps, na.rm = TRUE), 2),
+        Avg_value = round(mean(valid_temps, na.rm = TRUE), 2),
+        Days = ceiling(as.numeric(difftime(max(period_data$DateTime),
+                                           min(period_data$DateTime),
+                                           units = "days"))) + 1,
+        Unit = "°C"
+      )
+    })
   }
   
   # 4. Find Cold Periods
   find_cold_periods <- function(data) {
-    data %>%
-      # Calculate 5-day rolling average
-      mutate(
-        rolling_avg = rollapply(To, width = 120, # 5 days * 24 hours
-                                mean, align = "center", fill = NA),
-        Year = year(DateTime)
-      ) %>%
-      # Group by year and find coldest periods
-      group_by(Year) %>%
-      # Find potential cold periods
-      mutate(
+    data |>
+      dplyr::mutate(
+        rolling_avg = zoo::rollapply(To, width = 120,
+                                     mean, align = "center", fill = NA),
+        Year = lubridate::year(DateTime)
+      ) |>
+      dplyr::group_by(Year) |>
+      dplyr::mutate(
         event_group = cumsum(
-          c(TRUE, diff(as.numeric(DateTime)) > 144*3600) # 6 days gap minimum
+          c(TRUE, diff(as.numeric(DateTime)) > 144*3600)
         )
-      ) %>%
-      group_by(Year, event_group) %>%
-      slice_min(order_by = rolling_avg, n = 1) %>%
-      ungroup() %>%
-      group_by(Year) %>%
-      slice_min(order_by = rolling_avg, n = 3) %>%
-      ungroup() %>%
-      # Get full period data
-      pmap_dfr(function(...) {
-        current <- tibble(...)
-        period_data <- data %>%
-          filter(
-            DateTime >= current$DateTime - hours(60),
-            DateTime <= current$DateTime + hours(60)
+      ) |>
+      dplyr::group_by(Year, event_group) |>
+      dplyr::slice_min(order_by = rolling_avg, n = 1) |>
+      dplyr::ungroup() |>
+      dplyr::group_by(Year) |>
+      dplyr::slice_min(order_by = rolling_avg, n = 3) |>
+      dplyr::ungroup() |>
+      purrr::pmap_dfr(function(...) {
+        current <- dplyr::tibble(...)
+        period_data <- data |>
+          dplyr::filter(
+            DateTime >= current$DateTime - lubridate::hours(60),
+            DateTime <= current$DateTime + lubridate::hours(60)
           )
         
-        tibble(
+        dplyr::tibble(
           DateTime_from = format_datetime(min(period_data$DateTime)),
           DateTime_to = format_datetime(max(period_data$DateTime)),
           Max_value = round(max(period_data$To, na.rm = TRUE), 2),
@@ -1026,39 +1076,38 @@ analyze_weather_extremes <- function(weather_data, prefix, registry) {
   
   # 5. Find Humid Periods
   find_humid_periods <- function(data) {
-    data %>%
-      mutate(
-        # Calculate 7-day rolling average RH
-        rolling_rh = rollapply(RHo, width = 168, # 7 days * 24 hours
-                               mean, align = "center", fill = NA),
-        Year = year(DateTime)
-      ) %>%
-      # Find periods where average RH > 85%
-      filter(rolling_rh > 85) %>%
-      group_by(Year) %>%
-      # Group consecutive periods
-      mutate(
+    data |>
+      dplyr::mutate(
+        rolling_rh = zoo::rollapply(RHo, width = 168,
+                                    mean, align = "center", fill = NA),
+        Year = lubridate::year(DateTime)
+      ) |>
+      dplyr::filter(rolling_rh > 85) |>
+      dplyr::group_by(Year) |>
+      dplyr::mutate(
         event_group = cumsum(
-          c(TRUE, diff(as.numeric(DateTime)) > 192*3600) # 8 days gap minimum
+          c(TRUE, diff(as.numeric(DateTime)) > 192*3600)
         )
-      ) %>%
-      group_by(Year, event_group) %>%
-      summarise(
-        DateTime_from = format_datetime(min(DateTime) - hours(84)),
-        DateTime_to = format_datetime(max(DateTime) + hours(84)),
+      ) |>
+      dplyr::group_by(Year, event_group) |>
+      dplyr::summarise(
+        DateTime_from = format_datetime(min(DateTime) - lubridate::hours(84)),
+        DateTime_to = format_datetime(max(DateTime) + lubridate::hours(84)),
         Avg_value = round(mean(rolling_rh, na.rm = TRUE), 2),
         .groups = "drop"
-      ) %>%
-      mutate(Unit = "%RH")
+      ) |>
+      dplyr::mutate(Unit = "%RH")
   }
   
   # Process all extremes
-  dry_periods <- weather_data %>%
-    filter(!is.na(Precip)) %>%
+  dry_periods <- weather_data |>
+    dplyr::filter(!is.na(Precip)) |>
     find_dry_periods()
-  wet_periods <- weather_data %>%
-    filter(!is.na(Precip_12h)) %>%
+  
+  wet_periods <- weather_data |>
+    dplyr::filter(!is.na(Precip_12h)) |>
     find_wet_periods()
+  
   heatwaves <- find_heatwaves(weather_data)
   cold_periods <- find_cold_periods(weather_data)
   humid_periods <- find_humid_periods(weather_data)
