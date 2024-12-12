@@ -174,15 +174,30 @@ find_calendar_years <- function(data) {
     })
   }
   
-  years <- as.numeric(format(data$DateTime, "%Y"))
-  unique_years <- unique(years)
+  # Get valid dates only
+  valid_dates <- data$DateTime[!is.na(data$DateTime)]
+  if(length(valid_dates) == 0) {
+    warning("No valid dates found in data")
+    return(list())
+  }
+  
+  # Extract years safely
+  years <- as.numeric(format(valid_dates, "%Y"))
+  unique_years <- sort(unique(years[!is.na(years)]))
   
   calendar_years <- lapply(unique_years, function(y) {
-    year_data <- data[years == y, ]
-    start_date <- as.POSIXct(paste0(y, "-01-01 00:00:00"))
-    end_date <- as.POSIXct(paste0(y, "-12-31 23:59:59"))
-    expected_days <- as.numeric(difftime(end_date, start_date, units = "days")) + 1
-    actual_days <- n_distinct(as.Date(year_data$DateTime))
+    # Get data for this year
+    year_data <- data[format(data$DateTime, "%Y") == as.character(y), ]
+    
+    # Calculate expected days safely
+    expected_days <- tryCatch({
+      if(lubridate::leap_year(y)) 366 else 365
+    }, error = function(e) {
+      365  # Default to non-leap year if calculation fails
+    })
+    
+    # Calculate actual days
+    actual_days <- length(unique(as.Date(year_data$DateTime)))
     
     list(
       year = y,
@@ -268,13 +283,19 @@ analyze_time_periods <- function(data, location_name, verbose = TRUE) {
   if (verbose) cat("Total period:", format(total_period$start), "to", format(total_period$end), "\n")
   
   # 4. Try each period type in order
-  # A. Complete calendar years
-  years <- as.numeric(format(data$DateTime, "%Y"))
-  unique_years <- unique(years)
+  # A. Complete calendar years - with proper NA handling
+  valid_dates <- data$DateTime[!is.na(data$DateTime)]
+  years <- as.numeric(format(valid_dates, "%Y"))
+  unique_years <- sort(unique(years[!is.na(years)]))
   
   calendar_years <- lapply(unique_years, function(y) {
-    year_data <- data[years == y, ]
-    expected_days <- if(lubridate::leap_year(y)) 366 else 365
+    year_data <- data[format(data$DateTime, "%Y") == as.character(y), ]
+    expected_days <- tryCatch({
+      if(lubridate::leap_year(y)) 366 else 365
+    }, error = function(e) {
+      365  # Default to non-leap year if calculation fails
+    })
+    
     actual_days <- length(unique(as.Date(year_data$DateTime)))
     
     list(
@@ -285,14 +306,14 @@ analyze_time_periods <- function(data, location_name, verbose = TRUE) {
     )
   })
   
-  complete_years <- sapply(calendar_years, function(x) x$complete)
+  complete_years <- Filter(function(x) x$complete, calendar_years)
   
-  if (any(complete_years)) {
-    selected_years <- sapply(calendar_years[complete_years], function(x) x$year)
+  if (length(complete_years) > 0) {
+    selected_years <- sapply(complete_years, function(x) x$year)
     if (verbose) cat("Found complete calendar years:", paste(selected_years, collapse=", "), "\n")
     return(list(
       type = "calendar",
-      data = data[year(data$DateTime) %in% selected_years,],
+      selected_data = data[format(data$DateTime, "%Y") %in% as.character(selected_years), ],
       period_info = selected_years,
       total_period = total_period
     ))

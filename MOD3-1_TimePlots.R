@@ -61,19 +61,19 @@ create_climate_plot <- function(loc_data, loc_number, loc_name, dir_registry, pr
   p <- ggplot() +
     # Indoor climate data
     geom_line(data = loc_data, aes(x = DateTime, y = get(paste0("Ti", loc_number)), 
-                                   color = "Ti"), size = 0.2, na.rm = TRUE) +
+                                   color = "Ti"), linewidth = 0.2, na.rm = TRUE) +
     geom_line(data = loc_data, aes(x = DateTime, y = get(paste0("T24havg", loc_number)), 
-                                   color = "T24havg"), size = 0.2, alpha = 0.5, na.rm = TRUE) +
+                                   color = "T24havg"), linewidth = 0.2, alpha = 0.5, na.rm = TRUE) +
     geom_line(data = loc_data, aes(x = DateTime, y = get(paste0("T7davg", loc_number)), 
-                                   color = "T7davg"), size = 0.2, alpha = 0.3, na.rm = TRUE) +
+                                   color = "T7davg"), linewidth = 0.2, alpha = 0.3, na.rm = TRUE) +
     geom_line(data = loc_data, aes(x = DateTime, y = get(paste0("RHi", loc_number)), 
-                                   color = "RHi"), size = 0.2, na.rm = TRUE) +
+                                   color = "RHi"), linewidth = 0.2, na.rm = TRUE) +
     geom_line(data = loc_data, aes(x = DateTime, y = get(paste0("RH24havg", loc_number)), 
-                                   color = "RH24havg"), size = 0.2, alpha = 0.5, na.rm = TRUE) +
+                                   color = "RH24havg"), linewidth = 0.2, alpha = 0.5, na.rm = TRUE) +
     geom_line(data = loc_data, aes(x = DateTime, y = get(paste0("RH7davg", loc_number)), 
-                                   color = "RH7davg"), size = 0.2, alpha = 0.3, na.rm = TRUE) +
+                                   color = "RH7davg"), linewidth = 0.2, alpha = 0.3, na.rm = TRUE) +
     geom_line(data = loc_data, aes(x = DateTime, y = get(paste0("Dwpti", loc_number)), 
-                                   color = "Dwpti"), size = 0.2, na.rm = TRUE)
+                                   color = "Dwpti"), linewidth = 0.2, na.rm = TRUE)
   
   # Add weather extremes
   if (exists("Weather_Heatwaves") && !is.null(Weather_Heatwaves) && nrow(Weather_Heatwaves) > 0) {
@@ -104,7 +104,7 @@ create_climate_plot <- function(loc_data, loc_number, loc_name, dir_registry, pr
     p <- p + geom_vline(data = Weather_WetPeriods,
                         aes(xintercept = as.POSIXct(DateTime), 
                             color = "Heavy precipitation"),
-                        linetype = "dotted", size = 0.5)
+                        linetype = "dotted", linewidth = 0.5)
   }
   
   if (exists("Weather_HumidPeriods") && !is.null(Weather_HumidPeriods) && nrow(Weather_HumidPeriods) > 0) {
@@ -119,9 +119,9 @@ create_climate_plot <- function(loc_data, loc_number, loc_name, dir_registry, pr
   fluct_data <- get(paste0("Loc", loc_number, "_24hFluct"))
   p <- p +
     geom_line(data = fluct_data, aes(x = as.POSIXct(Date), y = T_fluct, 
-                                     color = "T_fluct"), size = 0.2, na.rm = TRUE) +
+                                     color = "T_fluct"), linewidth = 0.2, na.rm = TRUE) +
     geom_line(data = fluct_data, aes(x = as.POSIXct(Date), y = RH_fluct, 
-                                     color = "RH_fluct"), size = 0.2, na.rm = TRUE)
+                                     color = "RH_fluct"), linewidth = 0.2, na.rm = TRUE)
   
   # Set colors and legend
   p <- p +
