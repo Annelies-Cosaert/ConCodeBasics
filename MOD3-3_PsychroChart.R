@@ -10,24 +10,30 @@
 # marked with: *** MODIFY ... FOR NEW ANALYSIS ***
 # 1. Temperature and humidity range if needed
 # 2. Position of the RH% on graph if needed
+# 3. Define Climate Class
 
 # PROCESSING STEPS:
 # 1. Initial Setup
 #    - Load required packages
 #    - Set up psychrometric calculation functions
 
-# 2. Create individual location charts
+# 2. Create individual location charts / seasonal
 #    - Basic psychrometric plot per location
 #    - Optional: Add seasonal coloring
 #    - Optional: Add data density contours
 
 # 3. Create comparison charts
 #    - Multiple locations on same chart
-#    - Color coding by location/season
+#    - Color coding by location
+
+# 3. Create comparison charts
+#    - Multiple locations on same chart
+#    - Color coding by location
 
 # File Outputs:
-# - [filename]_Loc[x]_[name]_PsychroPlot.png: psychrometric chart per location
+# - [filename]_Loc[x]_[name]_PsychroPlot.png: psychrometric chart per location seasonal
 # - [filename]_All_PsychroPlot.png: comparison chart
+# - [filename]_Loc[x]_[name]_PsychroPlot.png: psychrometric chart per location seasonal compared to climate / storage class
 
 # STEP 1: FILE VERIFICATION AND INITIAL SETUP
 # ------------------------------------

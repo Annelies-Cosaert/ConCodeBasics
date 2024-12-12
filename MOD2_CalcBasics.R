@@ -1193,7 +1193,7 @@ extreme_weather <- analyze_weather_extremes(WEATHER, prefix, dir_registry)
 # Long term outer limits: 
 # Set per climate class. 
 # In theory, short term 24h fluctuations might go on top of long term outer limits. E.g. for class A1, RH +-5% it and max. 65% it can go over 65% with an absolute max of 70% as long as it goes under 65% again within 24h. 
-# However long term fluctuations are seen here and an absolute maximum and minimum with the possibility to visualize fluctuations at later stage.
+# Therefore, when the classes are visualised in MOD3, the max and min T and RH will include these potential fluctuations in this frame.
 # Get from the 'Locx' ('Letterhuis_Loc1_Beelden'), 'Tix' and 'RHix' (Ti1 and 'RHix) columns
 
 # Define all climate class criteria
@@ -1281,18 +1281,18 @@ climate_classes <- list(
     fluct_rh = 20
   )
 )
-# *** MODIFY VARIABLES IF NEED FOR CUSTOM ANALYSIS ***
+# *** MODIFY VARIABLES IF NEED FOR CUSTOM ANALYSIS *** 
 # Custom class can be added later using:
-# climate_classes$CUSTOM <- list(
-#   annual_temp = NA,    
-#   annual_rh = NA,
-#   temp_limits = c(NA, NA),
-#   rh_limits = c(NA, NA),
-#   seasonal_temp = c(NA, NA),
-#   seasonal_rh = c(NA, NA),
-#   fluct_temp = NA,
-#   fluct_rh = NA
-# )
+climate_classes$CUSTOM <- list( # Random class for testing
+   annual_temp = 18,    
+   annual_rh = 55,
+   temp_limits = c(5, 35),
+   rh_limits = c(30, 70),
+   seasonal_temp = c(-10, 5),
+   seasonal_rh = c(-15, 15),
+   fluct_temp = 5,
+   fluct_rh = 10
+)
 
 # **** CREATE LIST OF COOL-COLD-FROZEN SPECIFIC GUIDELINES TO DOCUMENT METHOD ****
 # Define special storage criteria
