@@ -222,5 +222,48 @@ create_psychro_plot <- function(loc_data, loc_number, loc_name, dir_registry, pr
   return(p)
 }
 
+# Function to create plots for all locations
+create_all_psychro_plots <- function() {
+  cat("Starting psychrometric plot creation\n")
+  
+  for(i in 1:nrow(location_names)) {
+    loc_num <- location_names$Loc_number[i]
+    loc_name <- location_names$Loc_name[i]
+    
+    cat("\n----------------------------------------\n")
+    cat("Processing location:", loc_num, "-", loc_name, "\n")
+    
+    tryCatch({
+      loc_data_name <- paste0("Loc", loc_num)
+      if(!exists(loc_data_name)) {
+        cat("ERROR: Location data not found:", loc_data_name, "\n")
+        next
+      }
+      
+      loc_data <- get(loc_data_name)
+      
+      p <- create_psychro_plot(
+        loc_data = loc_data,
+        loc_number = loc_num,
+        loc_name = loc_name,
+        dir_registry = dir_registry,
+        prefix = prefix
+      )
+      
+      if (!is.null(p)) {
+        cat("Plot created successfully\n")
+        print(p)
+      } else {
+        cat("Plot creation returned NULL\n")
+      }
+      
+    }, error = function(e) {
+      cat("ERROR in create_psychro_plot:", conditionMessage(e), "\n")
+      cat("Error class:", class(e), "\n")
+      cat("Error call:", deparse(e$call), "\n")
+    })
+  }
+}
+
 # Run the plotting function
 create_all_psychro_plots()
