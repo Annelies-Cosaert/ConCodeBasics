@@ -10,7 +10,8 @@
 # marked with: *** MODIFY ... FOR NEW ANALYSIS ***
 # 1. Temperature and humidity range if needed
 # 2. Position of the RH% on graph if needed
-# 3. Define Climate Class
+# 3. Choose which locations to compare. Default is 'all'.
+# 4. Define Climate Class to overlay climate class limits on individual locations.
 
 # PROCESSING STEPS:
 # 1. Initial Setup
@@ -22,18 +23,23 @@
 #    - Optional: Add seasonal coloring
 #    - Optional: Add data density contours
 
-# 3. Create comparison charts
+# 3. Create custom comparison charts
+#    TO-DO
 #    - Multiple locations on same chart
+#    - Be able to choose your locations to compare
 #    - Color coding by location
 
-# 3. Create comparison charts
-#    - Multiple locations on same chart
-#    - Color coding by location
+# 4. Create an overlay of ASHRAE limits.
+#    TO-DO
+#    - Be able to choose your specific climate class
+#    - Overlay on individual location charts
+#    - Overlay on comparison charts
 
 # File Outputs:
 # - [filename]_Loc[x]_[name]_PsychroPlot.png: psychrometric chart per location seasonal
 # - [filename]_All_PsychroPlot.png: comparison chart
-# - [filename]_Loc[x]_[name]_PsychroPlot.png: psychrometric chart per location seasonal compared to climate / storage class
+# - [filename]_Loc[x]_[name]_PsychroPlot_ClimCLass (or StorClass).png: psychrometric chart per location seasonal compared to climate / storage class
+# - [filename]_All_PsychroPlot_ClimCLass (or StorClass).png: psychrometric chart per location seasonal compared to climate / storage class
 
 # STEP 1: FILE VERIFICATION AND INITIAL SETUP
 # ------------------------------------
@@ -62,7 +68,7 @@ for(func in required_functions) {
 # Initialize psychrolib
 psychrolib::SetUnitSystem("SI")
 
-# STEP 2: CREATE PSYCHROMETRIC CHART FOR ONE LOCATION 
+# STEP 2: CREATE PSYCHROMETRIC CHART FOR ONE LOCATION (SEASONAL)
 # ------------------------------------
 
 # Function to create psychrometric chart for a single location
@@ -273,3 +279,17 @@ create_all_psychro_plots <- function() {
 
 # Run the plotting function
 create_all_psychro_plots()
+
+# STEP 3: CREATE CUSTOM COMPARISON CHARTS (choose location(s) and data)
+# ------------------------------------
+#    TO-DO
+#    - Multiple locations on same chart
+#    - Be able to choose your locations to compare
+#    - Color coding by location
+
+# STEP 4: CREATE THE OPTION TO OVERLAY ASHRAE GUIDELINES ON GRAPH
+# ------------------------------------
+#    TO-DO
+#    - Be able to choose your specific climate class
+#    - Overlay on individual location charts
+#    - Overlay on comparison charts

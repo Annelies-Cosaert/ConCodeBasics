@@ -12,26 +12,32 @@
 
 # IF NEED TO CREATE LIST TO DOCUMENT METHOD 
 # **** CREATE LIST ... TO DOCUMENT METHOD ****
-# None
+# 1. Indicate how to read a box plot and how it is calculated (median, outliers, etc)
 
 # PROCESSING STEPS:
 # 1. Initial Setup and File Verification
 #    - Load required packages
 #    - Verify Module 0 outputs exist
 
-# 2. All data Analysis
+# 2. Seasonal analysis per location
 #    - Add indoor climate data, weather extremes and fluctuations per lacation
 #    - Format the table
 #    - Save the plots
 
-# 3. Annual analysis
-#    TO-DO
+# 3. Annual analysis comparing all locations
+#    - Work with full years only (get from MOD 2)
+#    - Split in several years and save per year, per location
 
 # 4. Create plot for specific time range (optional)
 #    TO-DO
+#    - Allow user to define a specific period for analysis.
+#    - Work with hashtags to taggle on and off certain specific analysis: choose locations and data from a list.
 
 # File Outputs:
-# - [filename]_Loc[x]_[name]_BoxPlot.png: box plot per location (all data)
+# - [filename]_All_[name]_BoxPlot_T (or RH).png: box plots for all location (all data)
+# - [filename]_Loc[x]_[name]_BoxPlot_T (or RH).png: box plot per location seasonal (all data)
+# - [filename]_Loc[x]_[name]_BoxPlot_yyyy_T (or RH).png: box plot per location per year (all data)
+# - [filename]_Loc[x]_[name]_BoxPlot_from-to_T (or RH).png: box plot per location (all data)
 
 # STEP 1: FILE VERIFICATION AND INITIAL SETUP
 # ------------------------------------
@@ -51,6 +57,7 @@ if (!exists("dir_registry")) stop("Directory registry not found. Please run Modu
 # STEP 2: CREATE SEASONAL BOXPLOTS
 # ------------------------------------
 
+# **** CREATE LIST TO DOCUMENT METHOD OF BOXPLOT CREATION ****
 # create seasonal boxplots per year
 create_climate_boxplots <- function(loc_data, loc_number, loc_name, dir_registry, prefix) {
   # Print initial diagnostics
@@ -224,7 +231,7 @@ create_all_boxplots <- function() {
 # Run the plotting function
 create_all_boxplots()
 
-# STEP 2: CREATE ANNUAL BOXPLOTS COMPARING LOCATIONS
+# STEP 3: CREATE ANNUAL BOXPLOTS COMPARING LOCATIONS
 # ------------------------------------
 
 # Create comparison boxplots across locations
@@ -379,3 +386,9 @@ create_all_comparison_boxplots <- function() {
 
 # Run the plotting function
 create_all_comparison_boxplots()
+
+# STEP 4: CREATE CUSTOM BOXPLOTS FOR SPECIFIC TIME RANGE AND LOCATION (OPTIONAL)
+# ------------------------------------
+#    TO-DO
+#    - Allow user to define a specific period for analysis.
+#    - Work with hashtags to taggle on and off certain specific analysis: choose locations and data from a list.

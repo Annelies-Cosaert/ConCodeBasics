@@ -26,9 +26,20 @@
 
 # 3. Annual analysis
 #    TO-DO
+#    - Work with full years only (get from MOD 2)
+#    - Split in several years and save per year, per location
 
 # 4. Create plot for specific time range (optional)
 #    TO-DO
+#    - Allow user to define a specific period for analysis.
+#    - Work with hashtags to taggle on and off certain specific analysis: choose locations and data from a list.
+
+# 5. Create an overlay of ASHRAE limits.
+#    TO-DO
+#    - Be able to choose your specific climate class
+#    - Overlay on individual location charts
+#    - Overlay on comparison charts
+#    !!! Add the step by step monthly allowed changes (not yet part of MOD2)
 
 # File Outputs:
 # - [filename]_Loc[x]_[name]_TimePlot.png: Time plot per location (all data)
@@ -238,9 +249,23 @@ create_all_plots <- function() {
 # Run the plotting function
 create_all_plots()
 
-# STEP 2: ANNUAL DATA VISUALS
+# STEP 3: ANNUAL DATA VISUALS
 # ------------------------------------
+#    TO-DO
+#    - Work with full years only (get from MOD 2)
+#    - Split in several years and save per year, per location
 
-# STEP 3: COSTUM DATA ANALYSIS
+# STEP 4: COSTUM PLOT FOR SPECIFIC TIME RANGE ANALYSIS (OPTIONAL)
 # ------------------------------------
+#    TO-DO
+#    - Allow user to define a specific period for analysis.
+#    - Work with hashtags to taggle on and off certain specific analysis: choose locations and data from a list.
+
+# STEP 5: OVERLAY ASHRAE ON TIME PLOTS (OPTIONAL)
+# ------------------------------------
+#    TO-DO
+#    - Be able to choose your specific climate class
+#    - Overlay on individual location charts
+#    - Overlay on comparison charts
+#    !!! Add the step by step monthly allowed changes (not yet part of MOD2)
 
